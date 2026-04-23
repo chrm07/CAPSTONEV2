@@ -12,6 +12,19 @@ import { useAuth } from "@/contexts/auth-context"
 import { Check, CheckCircle, User, QrCode, Keyboard, Search, Loader2, XCircle, AlertCircle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
+// 🔥 Added AlertDialog imports here
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
 import { collection, query, where, getDocs, getDoc, doc, onSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { markStudentAsClaimed } from "@/lib/storage"
@@ -199,11 +212,10 @@ export default function QRVerificationPage() {
       }
 
       if (foundId) {
-        // 🔥 FIX: Check if we are verifying the same user twice so the spinner doesn't get stuck forever
         if (foundId === activeUserId) {
-           setIsProcessing(false); // Instantly turn off spinner because data is already loaded
+           setIsProcessing(false); 
         } else {
-           setActiveUserId(foundId); // Triggers useEffect to load data
+           setActiveUserId(foundId); 
         }
         
         toast({
@@ -271,16 +283,13 @@ export default function QRVerificationPage() {
       if (result.startsWith("BTS:")) {
         const qrValue = result.replace("BTS:", "")
         
-        // Check if it looks like a hash (64 hex characters) vs plain student ID
         if (/^[a-f0-9]{64}$/i.test(qrValue)) {
-          // It's a hashed QR code - need to search through students
           setStudentId(qrValue)
           setIsScanning(false)
           await resolveStudentByHash(qrValue)
           return
         }
         
-        // Legacy plain student ID
         studentIdFromQR = qrValue
       } else if (result.startsWith("BTS_ENCRYPTED:")) {
         const encryptedData = result.replace("BTS_ENCRYPTED:", "")
@@ -307,7 +316,6 @@ export default function QRVerificationPage() {
     }
   }
 
-  // Resolve student by hashed ID
   const resolveStudentByHash = async (hashedId: string) => {
     setIsProcessing(true)
     setVerificationResult(null)
@@ -525,14 +533,35 @@ export default function QRVerificationPage() {
                       </div>
                     ) : (
                       <div className="pt-2 shrink-0">
-                        <Button 
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-14 rounded-xl font-black text-base shadow-lg transition-transform active:scale-95" 
-                          onClick={handleMarkAsClaimed} 
-                          disabled={isProcessing}
-                        >
-                          {isProcessing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : null}
-                          {isProcessing ? "Processing..." : "Confirm Payout"}
-                        </Button>
+                        {/* 🔥 Added AlertDialog Confirmation Here */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-14 rounded-xl font-black text-base shadow-lg transition-transform active:scale-95" 
+                              disabled={isProcessing}
+                            >
+                              {isProcessing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : null}
+                              {isProcessing ? "Processing..." : "Confirm Payout"}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="rounded-3xl border-0 shadow-2xl p-6">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Are you sure to mark this claimed?</AlertDialogTitle>
+                              <AlertDialogDescription className="font-medium text-slate-600">
+                                This will verify the scholar has received their assistance. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="mt-4">
+                              <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">No, Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={handleMarkAsClaimed} 
+                                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold text-white shadow-md"
+                              >
+                                Yes, Mark as Claimed
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     )}
                   </div>
