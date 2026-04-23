@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { PermissionGuard } from "@/components/permission-guard"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
-  CalendarDays, Plus, Loader2, Banknote, Clock, MapPin, StopCircle, UploadCloud, RotateCcw, ChevronDown, ChevronUp, ChevronRight, Search, Edit, Trash2, Archive, Users
+  CalendarDays, Plus, Loader2, Banknote, Clock, MapPin, StopCircle, UploadCloud, RotateCcw, ChevronDown, ChevronRight, Search, Edit, Trash2, Archive, Users
 } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 
@@ -195,7 +195,6 @@ export default function SchedulingPage() {
         schedulePayload.distributionEnd = formData.endDate;
         schedulePayload.distributionTime = formData.startTime;
         schedulePayload.distributionAmount = formData.distributionAmount;
-        // Synchronized with Scanner variables
         schedulePayload.targetBarangays = formData.barangays;
         schedulePayload.isExtended = false;
         schedulePayload.extensionStart = null;
@@ -1139,4 +1138,49 @@ export default function SchedulingPage() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="mt-4">
-                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate
+                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCloseSubmissions} className="bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow-md" disabled={isLoading}>{isLoading ? "Closing..." : "Close Submissions"}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={isCloseDistDialogOpen} onOpenChange={setIsCloseDistDialogOpen}>
+            <AlertDialogContent className="rounded-3xl border-0 shadow-2xl p-6">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Close Distribution?</AlertDialogTitle>
+                <AlertDialogDescription className="font-medium text-slate-600">
+                  Are you sure you want to close the financial distribution portal? QR codes cannot be verified and payouts cannot be processed until it is reopened.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="mt-4">
+                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCloseDistribution} className="bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow-md" disabled={isLoading}>{isLoading ? "Closing..." : "Close Distribution"}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+            <AlertDialogContent className="rounded-3xl border-0 shadow-2xl p-6">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-xl font-black text-red-600 uppercase tracking-tight">End Current Cycle?</AlertDialogTitle>
+                <AlertDialogDescription className="font-medium text-slate-600">
+                  This action will: <br/>
+                  1. Move all current applications into the History collection.<br/>
+                  2. Delete all uploaded documents to clear the slate for students.<br/>
+                  3. Close Submission and Distribution portals.<br/>
+                  4. Save this cycle to the History Tab.<br/><br/>
+                  Are you absolutely sure?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="mt-4">
+                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={resetCycle} className="bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow-md" disabled={isLoading}>{isLoading ? "Ending Cycle..." : "End Cycle & Archive"}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+        </div>
+      </AdminLayout>
+    </PermissionGuard>
+  )
+}
