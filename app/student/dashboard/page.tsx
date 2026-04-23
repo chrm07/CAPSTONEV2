@@ -16,7 +16,7 @@ import {
   Clock, XCircle, Facebook, Activity, Calendar, AlertCircle, Info
 } from "lucide-react"
 
-function getTimelineSteps(application: any, schedule: any) {
+function getTimelineSteps(application: any, schedule: any, studentBarangay: string) {
   const formatDate = (dateString?: string) => dateString ? new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "";
 
   const hasApp = application?.isSubmitted;
@@ -24,8 +24,13 @@ function getTimelineSteps(application: any, schedule: any) {
   const isRejected = application?.status === 'rejected'; 
   const isClaimed = application?.isClaimed;
 
-  const hasFinancialSchedule = schedule?.distributionOpen;
-  const isExtension = schedule?.distributionType === "extension";
+  // Strict Barangay Filtering for the Timeline
+  const isTargetBarangay = schedule?.targetBarangays && Array.isArray(schedule.targetBarangays) 
+      ? schedule.targetBarangays.includes(studentBarangay) 
+      : true;
+
+  const hasFinancialSchedule = schedule?.distributionOpen && isTargetBarangay;
+  const isExtension = schedule?.distributionType === "extension" || schedule?.isExtended;
   const distributionEnded = !schedule?.distributionOpen && schedule?.distributionStart;
 
   return [
@@ -141,6 +146,7 @@ export default function StudentDashboard() {
       yearLevel: currentApp?.yearLevel || profile?.yearLevel || "Not specified",
       semester: currentApp?.semester || profile?.semester || "Not specified",
       school: currentApp?.school || profile?.schoolName || "Not specified",
+      barangay: currentApp?.barangay || profile?.barangay || "Not specified",
     })
   }, [user, currentApp])
 
@@ -163,6 +169,12 @@ export default function StudentDashboard() {
   const isApproved = currentApp?.isApproved;
   const isRejected = currentApp?.status === 'rejected';
 
+  // Strict Barangay Evaluation
+  const isTargetBarangay = schedule?.targetBarangays && Array.isArray(schedule.targetBarangays) 
+    ? schedule.targetBarangays.includes(studentData.barangay) 
+    : true;
+  const isDistributionActive = schedule?.distributionOpen && isTargetBarangay;
+
   let messageData = { 
     color: "slate", icon: CalendarDays, 
     title: "Submissions Closed", 
@@ -177,8 +189,8 @@ export default function StudentDashboard() {
       text: "Congrats, you have received the financial assistance. Please wait for the next financial assistance.",
       actionText: "View History", actionLink: "/student/history"
     };
-  } else if (schedule?.distributionOpen && isApproved) {
-    if (schedule?.distributionType === "extension") {
+  } else if (isDistributionActive && isApproved) {
+    if (schedule?.distributionType === "extension" || schedule?.isExtended) {
       messageData = { 
         color: "purple", icon: Banknote, 
         title: "Distribution Extended", 
@@ -193,8 +205,16 @@ export default function StudentDashboard() {
         actionText: "View QR Pass", actionLink: "/student/qrcode"
       };
     }
-  } else if (isApproved && !schedule?.distributionOpen) {
-    if (schedule?.distributionStart) {
+  } else if (isApproved && !isDistributionActive) {
+    if (schedule?.distributionOpen && !isTargetBarangay) {
+      // Distribution is open, but NOT for this student's barangay yet
+      messageData = { 
+        color: "amber", icon: Clock, 
+        title: "Not Your Schedule", 
+        text: "Your barangay is not scheduled for claiming today. Please wait for your barangay's turn.",
+        actionText: "View Documents", actionLink: "/student/documents"
+      };
+    } else if (schedule?.distributionStart) {
       messageData = { 
         color: "amber", icon: Clock, 
         title: "Distribution Ended", 
@@ -210,7 +230,6 @@ export default function StudentDashboard() {
       };
     }
   } else if (isRejected) {
-    // 🔥 FIX: Changed this to display "Reason: [Admin's reason]" + specific documents
     const resubmitDocs = currentApp?.resubmitDocuments || [];
     const docsList = resubmitDocs.length > 0 ? ` (${resubmitDocs.join(', ')})` : '';
     messageData = { 
@@ -442,7 +461,7 @@ export default function StudentDashboard() {
           </CardHeader>
           <CardContent className="pt-8 px-8 pb-4">
             <div className="relative pl-6 border-l-2 border-slate-200 ml-3">
-              {getTimelineSteps(currentApp, schedule).map((step) => (
+              {getTimelineSteps(currentApp, schedule, studentData.barangay).map((step) => (
                 <div key={step.id} className={`mb-10 relative animate-fade-in ${step.state === "pending" ? "opacity-50 grayscale" : ""}`}>
                   <div className={`absolute -left-[35px] h-8 w-8 rounded-full flex items-center justify-center shadow-md border-4 border-white ${
                     step.state === "completed" ? "bg-emerald-500" : 
