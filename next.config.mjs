@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Your existing settings
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -8,7 +7,6 @@ const nextConfig = {
     unoptimized: true,
   },
   
-  // The new security headers
   async headers() {
     return [
       {
@@ -32,7 +30,8 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()', 
+            // 🔥 Change made here: Allowed camera access for 'self'
+            value: 'camera=(self), microphone=(), geolocation=()', 
           },
           {
             key: 'Content-Security-Policy',
