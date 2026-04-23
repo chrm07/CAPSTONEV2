@@ -10,6 +10,19 @@ import { useToast } from "@/components/ui/use-toast"
 import { PermissionGuard } from "@/components/permission-guard"
 import { QrCode, Search, CheckCircle, XCircle, Loader2, MapPin, School, ScanLine } from "lucide-react"
 
+// Import the AlertDialog components
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
 import { collection, query, where, getDocs, updateDoc, doc, addDoc, onSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useRouter } from "next/navigation"
@@ -269,14 +282,34 @@ export default function ScannerDashboardPage() {
                       ) : (
                         <>
                           {schedule?.distributionOpen ? (
-                             <Button 
-                               onClick={handleConfirmPayout} 
-                               disabled={isProcessing}
-                               className="w-full h-16 px-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-lg shadow-xl hover:scale-105 active:scale-95 transition-all"
-                             >
-                               {isProcessing ? <Loader2 className="animate-spin h-6 w-6 mr-2" /> : <CheckCircle className="h-6 w-6 mr-2" />}
-                               Confirm Payout
-                             </Button>
+                             <AlertDialog>
+                               <AlertDialogTrigger asChild>
+                                 <Button 
+                                   disabled={isProcessing}
+                                   className="w-full h-16 px-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-lg shadow-xl hover:scale-105 active:scale-95 transition-all"
+                                 >
+                                   {isProcessing ? <Loader2 className="animate-spin h-6 w-6 mr-2" /> : <CheckCircle className="h-6 w-6 mr-2" />}
+                                   Confirm Payout
+                                 </Button>
+                               </AlertDialogTrigger>
+                               <AlertDialogContent>
+                                 <AlertDialogHeader>
+                                   <AlertDialogTitle>Are you sure to mark this claimed?</AlertDialogTitle>
+                                   <AlertDialogDescription>
+                                     This will verify the scholar has received their assistance. This action cannot be undone.
+                                   </AlertDialogDescription>
+                                 </AlertDialogHeader>
+                                 <AlertDialogFooter>
+                                   <AlertDialogCancel>No</AlertDialogCancel>
+                                   <AlertDialogAction 
+                                     onClick={handleConfirmPayout} 
+                                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                   >
+                                     Yes
+                                   </AlertDialogAction>
+                                 </AlertDialogFooter>
+                               </AlertDialogContent>
+                             </AlertDialog>
                           ) : (
                              <div className="text-center bg-red-50 p-4 rounded-2xl border border-red-100">
                                <XCircle className="h-6 w-6 text-red-600 mx-auto mb-1" />
