@@ -89,6 +89,11 @@
   "pnpm": {
     "overrides": {
       "nodemailer": "^6.8.0"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "core-js",
+      "protobufjs"
+    ]
   }
 }
