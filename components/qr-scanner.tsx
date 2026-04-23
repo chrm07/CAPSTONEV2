@@ -19,9 +19,7 @@ export function QrScanner({ onResult }: QrScannerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const scannerContainerRef = useRef<HTMLDivElement | null>(null)
   
-  // Store onResult in a ref so we don't restart the camera every render
   const onResultRef = useRef(onResult)
-  // Track if we just scanned to prevent double-firing
   const hasScannedRef = useRef(false)
 
   useEffect(() => {
@@ -37,6 +35,12 @@ export function QrScanner({ onResult }: QrScannerProps) {
     hasScannedRef.current = false
 
     try {
+      // 1. Force the browser to request camera permissions and fetch devices first
+      const devices = await Html5Qrcode.getCameras()
+      if (!devices || devices.length === 0) {
+        throw new Error("NotFoundError")
+      }
+
       if (scannerContainerRef.current && containerRef.current?.contains(scannerContainerRef.current)) {
         containerRef.current.removeChild(scannerContainerRef.current)
         scannerContainerRef.current = null
@@ -44,7 +48,6 @@ export function QrScanner({ onResult }: QrScannerProps) {
 
       const scannerContainer = document.createElement("div")
       scannerContainer.id = qrScannerId
-      // Ensure the container takes up space properly
       scannerContainer.style.width = "100%" 
       scannerContainer.style.height = "100%"
       
@@ -53,62 +56,62 @@ export function QrScanner({ onResult }: QrScannerProps) {
 
       scannerRef.current = new Html5Qrcode(qrScannerId)
 
-      // 🔥 THE FIX: Removed aspectRatio to stop the camera from warping!
       const config = {
-        fps: 15, // 15 gives the browser enough time to process the frame without lagging
+        fps: 15, 
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const minEdgePercentage = isFullscreen ? 0.5 : 0.6
           const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight)
           const calculatedSize = Math.floor(minEdgeSize * minEdgePercentage)
           return {
-            width: Math.max(calculatedSize, 200), // Ensure it doesn't get too small
+            width: Math.max(calculatedSize, 200), 
             height: Math.max(calculatedSize, 200),
           }
         },
-        disableFlip: false, // CRITICAL: Must be false so webcam mirrors correctly
+        disableFlip: false, 
       }
 
-      // Simplified constraints: highly advanced constraints often crash standard webcams
-      const cameraConfig = { 
-        facingMode: "environment" 
-      }
-
-      await scannerRef.current.start(
-        cameraConfig,
-        config,
-        (decodedText) => {
-          // Prevent multi-firing and immediately pause to freeze the frame on success
-          if (!hasScannedRef.current) {
-            hasScannedRef.current = true
-            console.log("[v0] QR Scanner SUCCESS - Decoded:", decodedText)
-            
-            if (scannerRef.current) {
-               scannerRef.current.pause(true)
-            }
-            
-            onResultRef.current(decodedText)
+      const onSuccess = (decodedText: string) => {
+        if (!hasScannedRef.current) {
+          hasScannedRef.current = true
+          console.log("[v0] QR Scanner SUCCESS - Decoded:", decodedText)
+          
+          if (scannerRef.current) {
+             scannerRef.current.pause(true)
           }
-        },
-        (errorMessage) => {
-          // Ignore routine frame errors (it throws this every millisecond it doesn't see a QR code)
+          
+          onResultRef.current(decodedText)
         }
-      )
+      }
+
+      // 2. Robust Fallback Logic
+      try {
+        // Try requesting the rear camera natively first
+        await scannerRef.current.start({ facingMode: "environment" }, config, onSuccess, () => {})
+      } catch (err) {
+        console.warn("Rear camera request failed, falling back to specific device ID.", err)
+        // Fall back to the first available authorized camera (resolves desktop/laptop issues)
+        await scannerRef.current.start(devices[0].id, config, onSuccess, () => {})
+      }
       
       setIsLoading(false)
     } catch (err) {
       console.error("[v0] Scanner initialization failed:", err)
       let errorMessage = "Camera access failed. "
-      if (err instanceof Error) {
-        if (err.message.includes("NotReadableError")) {
-          errorMessage += "Camera may be in use by another app."
-        } else if (err.message.includes("NotAllowedError")) {
-          errorMessage += "Camera permission denied. Please allow access."
-        } else if (err.message.includes("NotFoundError")) {
-          errorMessage += "No camera found."
+      
+      // 3. User-Friendly Error Mapping
+      if (err instanceof Error || typeof err === "string") {
+        const msg = String(err).toLowerCase()
+        if (msg.includes("notallowederror") || msg.includes("permission denied") || msg.includes("not allowed")) {
+          errorMessage = "Camera permission denied. Please allow access in your browser settings and refresh."
+        } else if (msg.includes("notfounderror")) {
+          errorMessage = "No camera hardware detected on this device."
+        } else if (msg.includes("notreadableerror") || msg.includes("is in use")) {
+          errorMessage = "Camera is currently in use by another app or browser tab."
         } else {
-          errorMessage += err.message
+          errorMessage += err instanceof Error ? err.message : msg
         }
       }
+      
       setError(errorMessage)
       setIsLoading(false)
     }
@@ -118,18 +121,14 @@ export function QrScanner({ onResult }: QrScannerProps) {
     setIsFullscreen(!isFullscreen)
   }
 
-  // Handle Fullscreen toggle
   useEffect(() => {
-    // Only re-initialize if the scanner was already running
     if (scannerRef.current?.isScanning) {
-      // Stop current scanner, then restart with new dimensions
       scannerRef.current.stop().then(() => {
          initializeScanner()
       }).catch(console.error)
     }
   }, [isFullscreen])
 
-  // Initial Mount & Cleanup
   useEffect(() => {
     initializeScanner()
 
@@ -140,7 +139,7 @@ export function QrScanner({ onResult }: QrScannerProps) {
         }).catch(console.error)
       }
     }
-  }, []) // Empty array: only run on mount and unmount!
+  }, []) 
 
   if (isFullscreen) {
     return (
