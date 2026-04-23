@@ -10,7 +10,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { PermissionGuard } from "@/components/permission-guard"
 import { QrCode, Search, CheckCircle, XCircle, Loader2, MapPin, School, ScanLine } from "lucide-react"
 
-// Import the AlertDialog components
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +26,6 @@ import { collection, query, where, getDocs, updateDoc, doc, addDoc, onSnapshot }
 import { db } from "@/lib/firebase"
 import { useRouter } from "next/navigation"
 
-// Hash function to match hashed QR codes
 async function hashValue(value: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(value)
@@ -45,7 +43,6 @@ export default function ScannerDashboardPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [schedule, setSchedule] = useState<any>(null)
 
-  // Listen to Global Schedule to verify Distribution is actually open
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "schedule"), (docSnap) => {
       if (docSnap.exists()) {
@@ -58,7 +55,6 @@ export default function ScannerDashboardPage() {
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     
-    // Clean up input (handles exact QR payload like "BTS:HASHED_ID" or just the raw ID/Email)
     const cleanQuery = searchQuery.replace("BTS:", "").trim()
     if (!cleanQuery) return
 
@@ -66,28 +62,22 @@ export default function ScannerDashboardPage() {
     setStudentResult(null)
 
     try {
-      // Search Active Applications (Not Archived)
       const appsRef = collection(db, "applications")
       const q = query(appsRef, where("isArchived", "==", false), where("isApproved", "==", true))
       
       const snapshot = await getDocs(q)
-      
-      // Check if the query looks like a hash (64 hex characters)
       const isHashed = /^[a-f0-9]{64}$/i.test(cleanQuery)
       
-      // Client-side filtering to match ID, Email, Name, or hashed ID
       const matchedApp = snapshot.docs.find(async (doc) => {
         const data = doc.data()
         const searchLower = cleanQuery.toLowerCase()
         
-        // Direct match
         if ((data.studentId === cleanQuery) ||
             (data.email && data.email.toLowerCase().includes(searchLower)) ||
             (data.fullName && data.fullName.toLowerCase().includes(searchLower))) {
           return true
         }
         
-        // Hash match - compare hashed studentId
         if (isHashed) {
           const hashedStudentId = await hashValue(data.studentId)
           if (hashedStudentId === cleanQuery) {
@@ -99,11 +89,25 @@ export default function ScannerDashboardPage() {
       })
 
       if (matchedApp) {
-        // Fetch User Photo if available
-        const userDoc = await getDocs(query(collection(db, "users"), where("id", "==", matchedApp.data().studentId)))
+        const studentData = matchedApp.data()
+
+        // STRICT BARANGAY FILTERING
+        if (schedule?.distributionOpen && schedule?.targetBarangays && Array.isArray(schedule.targetBarangays)) {
+          if (schedule.targetBarangays.length > 0 && !schedule.targetBarangays.includes(studentData.barangay)) {
+            toast({ 
+              variant: "destructive", 
+              title: "Schedule Mismatch", 
+              description: `Verification Denied. ${studentData.fullName} is from ${studentData.barangay}. Today's schedule is restricted to: ${schedule.targetBarangays.join(", ")}.` 
+            })
+            setIsSearching(false)
+            return 
+          }
+        }
+
+        const userDoc = await getDocs(query(collection(db, "users"), where("id", "==", studentData.studentId)))
         const photo = userDoc.empty ? null : (userDoc.docs[0].data().profileData?.studentPhoto || null)
 
-        setStudentResult({ id: matchedApp.id, photo, ...matchedApp.data() })
+        setStudentResult({ id: matchedApp.id, photo, ...studentData })
       } else {
         toast({ 
           variant: "destructive", 
@@ -123,7 +127,6 @@ export default function ScannerDashboardPage() {
     setIsProcessing(true)
 
     try {
-      // 1. Update Application status to Claimed
       const appRef = doc(db, "applications", studentResult.id)
       await updateDoc(appRef, {
         isClaimed: true,
@@ -131,7 +134,6 @@ export default function ScannerDashboardPage() {
         updatedAt: new Date().toISOString()
       })
 
-      // 2. Log Activity
       await addDoc(collection(db, "activity_logs"), {
         studentId: studentResult.studentId,
         action: "Financial Assistance Claimed",
@@ -140,7 +142,6 @@ export default function ScannerDashboardPage() {
         type: "system"
       })
 
-      // 3. Notify the student (using the strict 'to: student' structure)
       await addDoc(collection(db, "notifications"), {
         to: "student",
         userId: studentResult.studentId,
@@ -155,7 +156,6 @@ export default function ScannerDashboardPage() {
         className: "bg-emerald-600 text-white" 
       })
       
-      // Update local state to show claimed UI
       setStudentResult({ ...studentResult, isClaimed: true, claimedAt: new Date().toISOString() })
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Failed to confirm payout." })
@@ -169,7 +169,6 @@ export default function ScannerDashboardPage() {
       <AdminLayout>
         <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 animate-fade-in pb-12">
           
-          {/* 🔥 ALIGNED HEADER */}
           <div className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 shadow-sm p-6 sm:p-8">
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-400 rounded-full filter blur-[80px] opacity-10 -mr-20 -mt-20 pointer-events-none"></div>
             <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
@@ -218,7 +217,6 @@ export default function ScannerDashboardPage() {
                 </Button>
               </form>
 
-              {/* 🔥 NEW START SCANNING BUTTON WITH CORRECT REDIRECT */}
               <div className="relative mt-8 mb-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-slate-200"></div>
@@ -236,7 +234,6 @@ export default function ScannerDashboardPage() {
                 <ScanLine className="h-6 w-6" /> Start Scanning
               </Button>
 
-              {/* SEARCH RESULTS */}
               {studentResult && (
                 <div className="mt-8 animate-in slide-in-from-bottom-4">
                   <div className={`border-2 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm ${studentResult.isClaimed ? 'border-emerald-200 bg-emerald-50' : 'border-indigo-100 bg-white'}`}>
@@ -268,7 +265,6 @@ export default function ScannerDashboardPage() {
                       </div>
                     </div>
 
-                    {/* ACTION BUTTONS */}
                     <div className="w-full md:w-auto flex flex-col items-center md:items-end gap-3 shrink-0 pt-6 md:pt-0 border-t md:border-t-0 border-slate-200 md:border-none">
                       {studentResult.isClaimed ? (
                         <>
