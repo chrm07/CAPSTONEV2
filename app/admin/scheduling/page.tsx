@@ -195,7 +195,8 @@ export default function SchedulingPage() {
         schedulePayload.distributionEnd = formData.endDate;
         schedulePayload.distributionTime = formData.startTime;
         schedulePayload.distributionAmount = formData.distributionAmount;
-        schedulePayload.distributionBarangays = formData.barangays;
+        // Synchronized with Scanner variables
+        schedulePayload.targetBarangays = formData.barangays;
         schedulePayload.isExtended = false;
         schedulePayload.extensionStart = null;
         schedulePayload.extensionEnd = null;
@@ -210,18 +211,15 @@ export default function SchedulingPage() {
       let targetUserIds: string[] = [];
 
       if (distributionType === "extension") {
-          // For extension: get approved but unclaimed students from selected barangays
           const appsSnap = await getDocs(query(collection(db, "applications"), where("isApproved", "==", true)));
           targetUserIds = appsSnap.docs
               .filter(d => {
                 const appData = d.data();
-                // Only include if not claimed AND barangay matches selected barangays
                 return !appData.isClaimed && formData.barangays.includes(appData.barangay);
               })
               .map(d => d.data().studentId);
           targetUserIds = [...new Set(targetUserIds)]; 
       } else {
-          // For regular: get students from selected barangays only
           const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
           targetUserIds = usersSnap.docs
               .filter(u => {
@@ -231,7 +229,6 @@ export default function SchedulingPage() {
               .map(u => u.id);
       }
 
-      // Build barangay-specific message
       const selectedBarangaysStr = formData.barangays.length === 1 
         ? formData.barangays[0] 
         : `${formData.barangays.length} barangays`;
@@ -319,7 +316,7 @@ export default function SchedulingPage() {
       batch.set(doc(db, "settings", "schedule"), {
         submissionOpen: false, submissionStart: null, submissionEnd: null,
         distributionOpen: false, distributionStart: null, distributionEnd: null,
-        distributionTime: null, distributionAmount: null, distributionBarangays: null,
+        distributionTime: null, distributionAmount: null, targetBarangays: null,
         isExtended: false, extensionStart: null, extensionEnd: null
       }, { merge: true });
 
@@ -334,7 +331,6 @@ export default function SchedulingPage() {
     }
   };
 
-  // 🔥 FIX: Automatically synchronizes the updated barangay to all students and applications
   const handleSaveBarangay = async () => {
     if (!barangayFormName.trim()) {
       toast({ variant: "destructive", title: "Error", description: "Barangay name cannot be empty." });
@@ -358,17 +354,14 @@ export default function SchedulingPage() {
         
         updatedList = barangaysList.map(b => b.id === editingBarangay.id ? { ...b, name: newName, updatedAt: now } : b);
         
-        // Dynamic Synchronization Trigger
         if (oldName !== newName) {
            const batch = writeBatch(db);
            
-           // Sync User Profiles
            const usersSnap = await getDocs(query(collection(db, "users"), where("profileData.barangay", "==", oldName)));
            usersSnap.forEach(userDoc => {
                batch.update(userDoc.ref, { "profileData.barangay": newName });
            });
            
-           // Sync Active Applications
            const appsSnap = await getDocs(query(collection(db, "applications"), where("barangay", "==", oldName)));
            appsSnap.forEach(appDoc => {
                batch.update(appDoc.ref, { "barangay": newName });
@@ -589,12 +582,12 @@ export default function SchedulingPage() {
                                     <div className="flex items-start gap-3">
                                       <MapPin className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
                                       <div className="flex flex-wrap gap-2 max-w-[280px]">
-                                        {schedule.distributionBarangays?.map((b: string) => (
+                                        {schedule.targetBarangays?.map((b: string) => (
                                           <Badge key={b} className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 uppercase tracking-wider text-[10px] shadow-sm">
                                             {b}
                                           </Badge>
                                         ))}
-                                        {(!schedule.distributionBarangays || schedule.distributionBarangays.length === 0) && (
+                                        {(!schedule.targetBarangays || schedule.targetBarangays.length === 0) && (
                                           <span className="text-sm font-medium text-slate-400 italic">Not specified</span>
                                         )}
                                       </div>
@@ -808,12 +801,12 @@ export default function SchedulingPage() {
                                               <MapPin className="h-4 w-4 text-emerald-500 shrink-0" /> Targeted Barangays
                                             </h4>
                                             <div className="flex flex-wrap gap-2">
-                                              {hist.distributionBarangays?.map((b: string) => (
+                                              {hist.targetBarangays?.map((b: string) => (
                                                 <Badge key={b} className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2.5 py-1 uppercase tracking-wider text-[10px] shadow-sm">
                                                   {b}
                                                 </Badge>
                                               ))}
-                                              {(!hist.distributionBarangays || hist.distributionBarangays.length === 0) && (
+                                              {(!hist.targetBarangays || hist.targetBarangays.length === 0) && (
                                                 <span className="text-sm text-slate-500 italic">No barangays specified</span>
                                               )}
                                             </div>
@@ -1146,49 +1139,4 @@ export default function SchedulingPage() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="mt-4">
-                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleCloseSubmissions} className="bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow-md" disabled={isLoading}>{isLoading ? "Closing..." : "Close Submissions"}</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          <AlertDialog open={isCloseDistDialogOpen} onOpenChange={setIsCloseDistDialogOpen}>
-            <AlertDialogContent className="rounded-3xl border-0 shadow-2xl p-6">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Close Distribution?</AlertDialogTitle>
-                <AlertDialogDescription className="font-medium text-slate-600">
-                  Are you sure you want to close the financial distribution portal? QR codes cannot be verified and payouts cannot be processed until it is reopened.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="mt-4">
-                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleCloseDistribution} className="bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow-md" disabled={isLoading}>{isLoading ? "Closing..." : "Close Distribution"}</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
-            <AlertDialogContent className="rounded-3xl border-0 shadow-2xl p-6">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-xl font-black text-red-600 uppercase tracking-tight">End Current Cycle?</AlertDialogTitle>
-                <AlertDialogDescription className="font-medium text-slate-600">
-                  This action will: <br/>
-                  1. Move all current applications into the History collection.<br/>
-                  2. Delete all uploaded documents to clear the slate for students.<br/>
-                  3. Close Submission and Distribution portals.<br/>
-                  4. Save this cycle to the History Tab.<br/><br/>
-                  Are you absolutely sure?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="mt-4">
-                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate-600">Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={resetCycle} className="bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow-md" disabled={isLoading}>{isLoading ? "Ending Cycle..." : "End Cycle & Archive"}</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-        </div>
-      </AdminLayout>
-    </PermissionGuard>
-  )
-}
+                <AlertDialogCancel className="rounded-xl font-bold border-slate-200 text-slate
