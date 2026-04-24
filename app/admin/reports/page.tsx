@@ -339,35 +339,66 @@ export default function ReportsPage() {
         headers.push("Reason for Rejection / Remarks"); 
       }
 
-      if (filteredData.length === 0) { 
+      if (!filteredData || filteredData.length === 0) { 
         toast({ title: "No Data", description: `There are no ${reportType.toLowerCase()} records to export.` }); 
         return; 
       }
 
       const rows = filteredData.map(s => {
-        let displayStatus = s.applicationStatus.toUpperCase();
+        let displayStatus = (s.applicationStatus || "PENDING").toUpperCase();
         if (s.applicationStatus === "rejected") displayStatus = "UNSUCCESSFUL";
         if (reportType === "Claimed" || s.isClaimed) displayStatus = "CLAIMED";
         if (reportType === "Unclaimed" || (s.applicationStatus === "approved" && !s.isClaimed)) displayStatus = "UNCLAIMED";
 
         const fallbackAmount = (s.amountReceived && s.amountReceived !== "N/A") ? s.amountReceived : scheduledAmount;
         
-        const baseRow = [ `"${s.name}"`, `"${s.email}"`, `"${s.contactNumber}"`, s.age, s.gender, `"${s.schoolName} / ${s.course}"`, `"${s.barangay}"`, displayStatus, s.isPWD ? "YES" : "NO" ];
+        // Helper to safely format text and prevent commas from breaking CSV columns
+        const safeString = (val: any) => `"${String(val || "").replace(/"/g, '""')}"`;
         
-        if (reportType === "Claimed") baseRow.push(`"${s.claimedAt}"`, `"${fallbackAmount}"`);
+        const baseRow = [ 
+          safeString(s.name), 
+          safeString(s.email), 
+          safeString(s.contactNumber), 
+          s.age || "N/A", 
+          s.gender || "N/A", 
+          safeString(`${s.schoolName} / ${s.course}`), 
+          safeString(s.barangay), 
+          displayStatus, 
+          s.isPWD ? "YES" : "NO" 
+        ];
+        
+        if (reportType === "Claimed") baseRow.push(safeString(s.claimedAt), safeString(fallbackAmount));
         else if (reportType === "Unclaimed") baseRow.push(`"PENDING PAYOUT"`);
-        else if (reportType === "Unsuccessful") baseRow.push(`"${s.rejectionReason}"`);
+        else if (reportType === "Unsuccessful") baseRow.push(safeString(s.rejectionReason));
+        
         return baseRow;
       });
 
+      // Join the CSV content
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); 
+      
+      // Add UTF-8 BOM so Excel properly identifies special characters (e.g., ₱)
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' }); 
+      
       const url = URL.createObjectURL(blob); 
-      const link = document.body.appendChild(document.createElement("a")); 
-      link.href = url; link.download = `Student_List_${reportType}_${exportName.replace(/\s+/g, '_')}.csv`; link.click(); 
+      const link = document.createElement("a"); 
+      link.href = url; 
+      
+      // Crucial Fix: Regex sanitizes the filename to completely exclude invalid OS characters like ":"
+      const safeExportName = (exportName || "Export").replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.setAttribute("download", `Student_List_${reportType}_${safeExportName}.csv`); 
+      
+      document.body.appendChild(link);
+      link.click(); 
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
       toast({ title: "Export Successful", description: `${reportType} list has been downloaded.`, className: "bg-emerald-600 text-white" });
-    } catch (error) { toast({ title: "Export Failed", variant: "destructive" }); }
+    } catch (error: any) { 
+      console.error("Export error:", error);
+      toast({ title: "Export Failed", description: error?.message || "There was a problem exporting the file.", variant: "destructive" }); 
+    }
   }
 
   const handleExportPDF = async (cycleName: string) => {
@@ -389,7 +420,7 @@ export default function ReportsPage() {
 
       const opt = { 
         margin: [0.3, 0.3, 0.3, 0.3], 
-        filename: `Analytics_${cycleName.replace(/\s+/g, '_')}.pdf`, 
+        filename: `Analytics_${cycleName.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`, 
         image: { type: 'jpeg', quality: 1 }, 
         html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
         jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
@@ -583,11 +614,11 @@ export default function ReportsPage() {
                             const scheduledAmountText = matchedSchedule?.distributionAmount ? `₱${matchedSchedule.distributionAmount}` : "N/A";
 
                             const filteredStudents = data.filter(s => 
-                              s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              s.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              s.course.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              s.schoolName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              s.barangay.toLowerCase().includes(searchQuery.toLowerCase())
+                              (s.name || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              (s.email || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              (s.course || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (s.schoolName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (s.barangay || "").toLowerCase().includes(searchQuery.toLowerCase())
                             );
 
                             return (
@@ -627,10 +658,10 @@ export default function ReportsPage() {
                                             </div>
                                           </CardHeader>
                                           <CardContent className="pt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                                             <Button onClick={() => handleExportExcel(data, cycle, 'All', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><FileSpreadsheet className="h-5 w-5 text-blue-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">All Students<br/>(XLSX)</span></Button>
-                                             <Button onClick={() => handleExportExcel(data, cycle, 'Claimed', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><Banknote className="h-5 w-5 text-teal-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Claimed List<br/>(XLSX)</span></Button>
-                                             <Button onClick={() => handleExportExcel(data, cycle, 'Unclaimed', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><UnclaimedIcon className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight text-red-600">Unclaimed<br/>(XLSX)</span></Button>
-                                             <Button onClick={() => handleExportExcel(data, cycle, 'Unsuccessful', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><XCircle className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Unsuccessful List<br/>(XLSX)</span></Button>
+                                             <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'All', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><FileSpreadsheet className="h-5 w-5 text-blue-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">All Students<br/>(XLSX)</span></Button>
+                                             <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Claimed', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><Banknote className="h-5 w-5 text-teal-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Claimed List<br/>(XLSX)</span></Button>
+                                             <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Unclaimed', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><UnclaimedIcon className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight text-red-600">Unclaimed<br/>(XLSX)</span></Button>
+                                             <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Unsuccessful', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><XCircle className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Unsuccessful List<br/>(XLSX)</span></Button>
                                              <Button onClick={() => handleExportPDF(cycle)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><FileImage className="h-5 w-5 text-emerald-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Export Charts<br/>(PDF)</span></Button>
                                           </CardContent>
                                         </Card>
