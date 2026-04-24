@@ -259,9 +259,6 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                   </div>
                   <span className="text-lg font-bold text-slate-900">BTS Portal</span>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
-                  <X className="h-5 w-5" />
-                </Button>
               </div>
 
               <div className="flex-1 flex flex-col py-4 overflow-hidden">
