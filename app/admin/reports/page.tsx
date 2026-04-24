@@ -352,23 +352,16 @@ export default function ReportsPage() {
 
         const fallbackAmount = (s.amountReceived && s.amountReceived !== "N/A") ? s.amountReceived : scheduledAmount;
         
-        const safeString = (val: any) => `"${String(val || "").replace(/"/g, '""')}"`;
+        const baseRow = [ `"${s.name}"`, `"${s.email}"`, `"${s.contactNumber}"`, s.age, s.gender, `"${s.schoolName} / ${s.course}"`, `"${s.barangay}"`, displayStatus, s.isPWD ? "YES" : "NO" ];
         
-        const baseRow = [ 
-          safeString(s.name), safeString(s.email), safeString(s.contactNumber), 
-          s.age || "N/A", s.gender || "N/A", safeString(`${s.schoolName} / ${s.course}`), 
-          safeString(s.barangay), displayStatus, s.isPWD ? "YES" : "NO" 
-        ];
-        
-        if (reportType === "Claimed") baseRow.push(safeString(s.claimedAt), safeString(fallbackAmount));
+        if (reportType === "Claimed") baseRow.push(`"${s.claimedAt}"`, `"${fallbackAmount}"`);
         else if (reportType === "Unclaimed") baseRow.push(`"PENDING PAYOUT"`);
-        else if (reportType === "Unsuccessful") baseRow.push(safeString(s.rejectionReason));
+        else if (reportType === "Unsuccessful") baseRow.push(`"${s.rejectionReason}"`);
         return baseRow;
       });
 
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-      const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' }); 
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); 
       const url = URL.createObjectURL(blob); 
       const link = document.body.appendChild(document.createElement("a")); 
       link.href = url; link.download = `Student_List_${reportType}_${exportName.replace(/\s+/g, '_')}.csv`; link.click(); 
@@ -377,103 +370,59 @@ export default function ReportsPage() {
     } catch (error) { toast({ title: "Export Failed", variant: "destructive" }); }
   }
 
-  // 🔥 100% FIREWALL-PROOF PDF GENERATOR
-  // This uses jspdf and jspdf-autotable which are already installed in your package.json!
-  const handleExportPDFNative = async (cycleName: string, cycleData: ReportScholar[], cycleStats: any) => {
+  // 🔥 COMPLETELY LOCAL, FIREWALL-PROOF GRAPH EXPORTER
+  const handleExportPDF = async (cycleName: string) => {
+    const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
+    if (!element) {
+      toast({ title: "Export Failed", description: "Could not find the graphs.", variant: "destructive" });
+      return;
+    }
+
+    toast({ 
+      title: "Generating PDF...", 
+      description: "Please wait while we capture your graphs.", 
+      className: "bg-blue-600 text-white" 
+    });
+
     try {
-      toast({ title: "Generating PDF...", description: "Building native report...", className: "bg-blue-600 text-white" });
-      
-      // Dynamically load to prevent Next.js build errors
-      const { default: jsPDF } = await import("jspdf");
-      const { default: autoTable } = await import("jspdf-autotable");
-      
-      const doc = new jsPDF();
-      
-      // --- HEADER ---
-      doc.setFontSize(18);
-      doc.setTextColor(16, 185, 129); // Emerald 500
-      doc.text(`${cycleName} - Analytics Report`, 14, 20);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Generated securely offline on: ${new Date().toLocaleDateString()}`, 14, 26);
-      
-      // --- EXECUTIVE SUMMARY ---
-      doc.setFontSize(14);
-      doc.setTextColor(15, 23, 42);
-      doc.text("Executive Summary", 14, 40);
-      
-      autoTable(doc, {
-        startY: 45,
-        head: [['Total Apps', 'Approved', 'Unsuccessful', 'Claimed', 'Unclaimed', 'PWD']],
-        body: [[
-          cycleStats.total, 
-          cycleStats.approved, 
-          cycleStats.rejected, 
-          cycleStats.claimed, 
-          cycleStats.unclaimed, 
-          cycleStats.pwd
-        ]],
-        theme: 'grid',
-        headStyles: { fillColor: [16, 185, 129] }
-      });
-      
-      let currentY = (doc as any).lastAutoTable.finalY + 15;
+      // Dynamic imports prevent Next.js from throwing SSR/Webpack build errors
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
 
-      // --- DEMOGRAPHICS ---
-      doc.setFontSize(14);
-      doc.text("Demographic Distribution Data", 14, currentY);
-      currentY += 5;
-
-      const genderCounts = getGenderData(cycleData).map(d => [d.name, d.value]);
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Gender', 'Applicant Count']],
-        body: genderCounts,
-        theme: 'striped',
-        tableWidth: 85,
-        margin: { left: 14 }
-      });
-      
-      const ageCounts = getAgeData(cycleData).map(d => [d.name, d.value]);
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Age Group', 'Applicant Count']],
-        body: ageCounts,
-        theme: 'striped',
-        tableWidth: 85,
-        margin: { left: 110 }
-      });
-      
-      currentY = Math.max((doc as any).lastAutoTable.finalY, currentY + 40) + 15;
-      
-      const barangayCounts = getBarangayData(cycleData).map(d => [d.name, d.value]);
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Barangay', 'Applicant Count']],
-        body: barangayCounts,
-        theme: 'striped'
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff"
       });
 
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-
-      const courseCounts = getCourseData(cycleData).map(d => [d.name, d.value]);
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Program / Course', 'Applicant Count']],
-        body: courseCounts,
-        theme: 'striped'
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      
+      // Setup A3 Landscape formatting
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'in',
+        format: 'a3'
       });
 
-      // Save directly to the device
-      const safeName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
-      doc.save(`Analytics_Report_${safeName}.pdf`);
+      const margin = 0.3; 
+      const pdfWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'JPEG', margin, margin, pdfWidth, pdfHeight);
       
-      toast({ title: "Export Successful", description: "Native PDF downloaded.", className: "bg-emerald-600 text-white" });
+      const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      pdf.save(`Analytics_${safeExportName}.pdf`);
       
-    } catch (err: any) {
-      console.error(err);
-      toast({ title: "Export Failed", description: err.message || "Failed to generate native PDF.", variant: "destructive" });
+      toast({ title: "Export Successful", description: "PDF has been saved.", className: "bg-emerald-600 text-white" });
+    } catch (error: any) {
+      console.error("PDF Export error:", error);
+      toast({ 
+        title: "Export Failed", 
+        description: "Make sure you ran 'pnpm add html2canvas' in your terminal.", 
+        variant: "destructive",
+        duration: 8000 
+      });
     }
   }
 
@@ -705,10 +654,10 @@ export default function ReportsPage() {
                                              <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Unclaimed', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><UnclaimedIcon className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight text-red-600">Unclaimed<br/>(XLSX)</span></Button>
                                              <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Unsuccessful', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><XCircle className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Unsuccessful List<br/>(XLSX)</span></Button>
                                              
-                                             {/* 🔥 UPDATED TO NATIVE OFFLINE PDF GENERATOR */}
-                                             <Button onClick={() => handleExportPDFNative(cycle, data, cycleStats)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5">
+                                             {/* 🔥 UPDATED GRAPH EXPORTER */}
+                                             <Button onClick={() => handleExportPDF(cycle)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5">
                                                <FileImage className="h-5 w-5 text-emerald-500 shrink-0 group-hover:scale-110 transition-transform" />
-                                               <span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Export Stats<br/>(PDF)</span>
+                                               <span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Export Graphs<br/>(PDF)</span>
                                              </Button>
                                           </CardContent>
                                         </Card>
