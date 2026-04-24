@@ -463,22 +463,23 @@ export default function ProfilePage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           
-          <TabsList className="flex w-full justify-start bg-transparent border-b border-slate-200 rounded-none h-auto p-0 gap-6 px-2 overflow-x-auto no-scrollbar">
+          {/* FIX: Replaced scrolling with flex-1 and text wrapping so they fit on one line */}
+          <TabsList className="flex w-full bg-transparent border-b border-slate-200 rounded-none h-auto p-0 gap-1 sm:gap-4">
             <TabsTrigger 
               value="info" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-3 text-sm sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap shrink-0"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-1 py-3 text-[11px] leading-tight sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-normal break-words text-center h-full"
             >
               Information
             </TabsTrigger>
             <TabsTrigger 
               value="academics" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-3 text-sm sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap shrink-0"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-1 py-3 text-[11px] leading-tight sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-normal break-words text-center h-full"
             >
               Academic Profile
             </TabsTrigger>
             <TabsTrigger 
               value="security" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-3 text-sm sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap shrink-0"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-1 py-3 text-[11px] leading-tight sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-normal break-words text-center h-full"
             >
               Change Password
             </TabsTrigger>
