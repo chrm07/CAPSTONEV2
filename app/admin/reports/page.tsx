@@ -340,7 +340,7 @@ export default function ReportsPage() {
       }
 
       if (!filteredData || filteredData.length === 0) { 
-        toast({ title: "No Data", description: `There are no ${reportType.toLowerCase()} records to export.` }); 
+        toast({ title: "No Data", description: `There are no ${reportType.toLowerCase()} records to export.`, variant: "destructive" }); 
         return; 
       }
 
@@ -356,15 +356,9 @@ export default function ReportsPage() {
         const safeString = (val: any) => `"${String(val || "").replace(/"/g, '""')}"`;
         
         const baseRow = [ 
-          safeString(s.name), 
-          safeString(s.email), 
-          safeString(s.contactNumber), 
-          s.age || "N/A", 
-          s.gender || "N/A", 
-          safeString(`${s.schoolName} / ${s.course}`), 
-          safeString(s.barangay), 
-          displayStatus, 
-          s.isPWD ? "YES" : "NO" 
+          safeString(s.name), safeString(s.email), safeString(s.contactNumber), 
+          s.age || "N/A", s.gender || "N/A", safeString(`${s.schoolName} / ${s.course}`), 
+          safeString(s.barangay), displayStatus, s.isPWD ? "YES" : "NO" 
         ];
         
         if (reportType === "Claimed") baseRow.push(safeString(s.claimedAt), safeString(fallbackAmount));
@@ -374,18 +368,14 @@ export default function ReportsPage() {
         return baseRow;
       });
 
-      // Join the CSV content
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      
-      // Add UTF-8 BOM so Excel properly identifies special characters (e.g., ₱)
-      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM ensures special chars (like ₱) work in Excel
       const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' }); 
       
       const url = URL.createObjectURL(blob); 
       const link = document.createElement("a"); 
       link.href = url; 
       
-      // Crucial Fix: Regex sanitizes the filename to completely exclude invalid OS characters like ":"
       const safeExportName = (exportName || "Export").replace(/[^a-zA-Z0-9_-]/g, '_');
       link.setAttribute("download", `Student_List_${reportType}_${safeExportName}.csv`); 
       
@@ -396,14 +386,17 @@ export default function ReportsPage() {
       
       toast({ title: "Export Successful", description: `${reportType} list has been downloaded.`, className: "bg-emerald-600 text-white" });
     } catch (error: any) { 
-      console.error("Export error:", error);
-      toast({ title: "Export Failed", description: error?.message || "There was a problem exporting the file.", variant: "destructive" }); 
+      console.error("Excel Export error:", error);
+      toast({ title: "Export Failed", description: error?.message || "There was a problem exporting the CSV.", variant: "destructive" }); 
     }
   }
 
   const handleExportPDF = async (cycleName: string) => {
     const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
-    if (!element || typeof window === "undefined") return;
+    if (!element || typeof window === "undefined") {
+      toast({ title: "Export Failed", description: "Could not find the chart container to export.", variant: "destructive" });
+      return;
+    }
     
     toast({ title: "Preparing PDF...", description: "Please wait while we generate your report.", className: "bg-blue-600 text-white" });
     
@@ -411,27 +404,37 @@ export default function ReportsPage() {
       if (!(window as any).html2pdf) {
         await new Promise((resolve, reject) => {
           const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-          script.onload = resolve;
-          script.onerror = () => reject(new Error("Failed to load PDF library"));
+          // Switched CDN to jsdelivr to avoid adblocker issues
+          script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js";
+          script.onload = () => {
+            if ((window as any).html2pdf) resolve(true);
+            else reject(new Error("PDF library loaded but failed to initialize."));
+          };
+          script.onerror = () => reject(new Error("Failed to load PDF library. Your adblocker or firewall might be blocking the CDN."));
           document.body.appendChild(script);
         });
       }
 
+      const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
       const opt = { 
         margin: [0.3, 0.3, 0.3, 0.3], 
-        filename: `Analytics_${cycleName.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`, 
-        image: { type: 'jpeg', quality: 1 }, 
-        html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
+        filename: `Analytics_${safeExportName}.pdf`, 
+        image: { type: 'jpeg', quality: 0.98 }, 
+        html2canvas: { scale: 2, useCORS: true, logging: false }, 
         jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
         pagebreak: { mode: ['css', 'legacy'] }
       };
 
       await (window as any).html2pdf().set(opt).from(element).save();
       toast({ title: "Export Successful", description: "PDF has been downloaded.", className: "bg-emerald-600 text-white" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("PDF Export error:", error);
-      toast({ title: "Export Failed", description: "An error occurred while generating the PDF.", variant: "destructive" });
+      toast({ 
+        title: "Export Failed", 
+        description: error?.message || "An unknown error occurred while rendering the PDF.", 
+        variant: "destructive",
+        duration: 6000 
+      });
     }
   }
 
