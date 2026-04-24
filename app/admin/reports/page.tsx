@@ -321,6 +321,7 @@ export default function ReportsPage() {
     { name: "Unsuccessful", value: stats.rejected, fill: "#ef4444" } 
   ]
 
+  // 🔥 FIX: Adjusted filtering logic to support both active and historical status schemas
   const handleExportExcel = (cycleData: ReportScholar[], exportName: string, reportType: string, scheduledAmount: string) => {
     try {
       let filteredData = cycleData;
@@ -339,112 +340,57 @@ export default function ReportsPage() {
         headers.push("Reason for Rejection / Remarks"); 
       }
 
-      if (!filteredData || filteredData.length === 0) { 
-        toast({ title: "No Data", description: `There are no ${reportType.toLowerCase()} records to export.`, variant: "destructive" }); 
+      if (filteredData.length === 0) { 
+        toast({ title: "No Data", description: `There are no ${reportType.toLowerCase()} records to export.` }); 
         return; 
       }
 
       const rows = filteredData.map(s => {
-        let displayStatus = (s.applicationStatus || "PENDING").toUpperCase();
+        let displayStatus = s.applicationStatus.toUpperCase();
         if (s.applicationStatus === "rejected") displayStatus = "UNSUCCESSFUL";
         if (reportType === "Claimed" || s.isClaimed) displayStatus = "CLAIMED";
         if (reportType === "Unclaimed" || (s.applicationStatus === "approved" && !s.isClaimed)) displayStatus = "UNCLAIMED";
 
         const fallbackAmount = (s.amountReceived && s.amountReceived !== "N/A") ? s.amountReceived : scheduledAmount;
         
-        const safeString = (val: any) => `"${String(val || "").replace(/"/g, '""')}"`;
+        const baseRow = [ `"${s.name}"`, `"${s.email}"`, `"${s.contactNumber}"`, s.age, s.gender, `"${s.schoolName} / ${s.course}"`, `"${s.barangay}"`, displayStatus, s.isPWD ? "YES" : "NO" ];
         
-        const baseRow = [ 
-          safeString(s.name), safeString(s.email), safeString(s.contactNumber), 
-          s.age || "N/A", s.gender || "N/A", safeString(`${s.schoolName} / ${s.course}`), 
-          safeString(s.barangay), displayStatus, s.isPWD ? "YES" : "NO" 
-        ];
-        
-        if (reportType === "Claimed") baseRow.push(safeString(s.claimedAt), safeString(fallbackAmount));
+        if (reportType === "Claimed") baseRow.push(`"${s.claimedAt}"`, `"${fallbackAmount}"`);
         else if (reportType === "Unclaimed") baseRow.push(`"PENDING PAYOUT"`);
-        else if (reportType === "Unsuccessful") baseRow.push(safeString(s.rejectionReason));
-        
+        else if (reportType === "Unsuccessful") baseRow.push(`"${s.rejectionReason}"`);
         return baseRow;
       });
 
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM ensures special chars (like ₱) work in Excel
-      const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' }); 
-      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); 
       const url = URL.createObjectURL(blob); 
-      const link = document.createElement("a"); 
-      link.href = url; 
-      
-      const safeExportName = (exportName || "Export").replace(/[^a-zA-Z0-9_-]/g, '_');
-      link.setAttribute("download", `Student_List_${reportType}_${safeExportName}.csv`); 
-      
-      document.body.appendChild(link);
-      link.click(); 
+      const link = document.body.appendChild(document.createElement("a")); 
+      link.href = url; link.download = `Student_List_${reportType}_${exportName.replace(/\s+/g, '_')}.csv`; link.click(); 
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
       toast({ title: "Export Successful", description: `${reportType} list has been downloaded.`, className: "bg-emerald-600 text-white" });
-    } catch (error: any) { 
-      console.error("Excel Export error:", error);
-      toast({ title: "Export Failed", description: error?.message || "There was a problem exporting the CSV.", variant: "destructive" }); 
-    }
+    } catch (error) { toast({ title: "Export Failed", variant: "destructive" }); }
   }
 
-  // --- SAFELY COMPILES IN NEXT.JS WITHOUT WEBPACK MODULE ERRORS ---
   const handleExportPDF = async (cycleName: string) => {
-    const targetId = `pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`;
-    const element = document.getElementById(targetId);
+    const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
+    if (!element || typeof window === "undefined") return;
+    toast({ title: "Preparing PDF...", className: "bg-blue-600 text-white" });
     
-    if (!element) {
-      toast({ title: "Export Failed", description: "Could not find the chart container.", variant: "destructive" });
-      return;
+    if (!(window as any).html2pdf) {
+      const script = document.body.appendChild(document.createElement("script"));
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      await new Promise((resolve) => { script.onload = resolve; });
     }
 
-    toast({ 
-      title: "Generating PDF...", 
-      description: "Please wait while we save your report.", 
-      className: "bg-blue-600 text-white" 
-    });
-
-    try {
-      // Dynamic imports prevent Next.js from throwing SSR/Webpack build errors
-      const html2canvas = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
-
-      const canvas = await html2canvas(element, { 
-        scale: 2, 
-        useCORS: true,
-        logging: false 
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      
-      // Setup A3 Landscape formatting
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'in',
-        format: 'a3'
-      });
-
-      const margin = 0.3; // Match previous 0.3in margin
-      const pdfWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'JPEG', margin, margin, pdfWidth, pdfHeight);
-      
-      const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
-      pdf.save(`Analytics_${safeExportName}.pdf`);
-      
-      toast({ title: "Export Successful", description: "PDF has been downloaded.", className: "bg-emerald-600 text-white" });
-    } catch (error: any) {
-      console.error("PDF Export error:", error);
-      toast({ 
-        title: "Export Failed", 
-        description: "Failed to render PDF. Did you install html2canvas?", 
-        variant: "destructive",
-        duration: 8000 
-      });
-    }
+    const opt = { 
+      margin: [0.3, 0.3, 0.3, 0.3], 
+      filename: `Analytics_${cycleName.replace(/\s+/g, '_')}.pdf`, 
+      image: { type: 'jpeg', quality: 1 }, 
+      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
+      jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    };
+    (window as any).html2pdf().set(opt).from(element).save();
   }
 
   const renderChart = (data: any[], chartElement: React.ReactNode, emptyMessage: string) => {
