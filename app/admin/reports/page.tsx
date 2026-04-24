@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import {
   Users, CheckCircle, Clock, XCircle, TrendingUp, GraduationCap, 
   MapPin, School, BookOpen, UserIcon, ChevronDown, Loader2, Activity, 
-  FileSpreadsheet, FileImage, FileBarChart, CalendarDays, Download, Ban, Banknote, Archive, Accessibility, Search
+  FileSpreadsheet, FileImage, FileBarChart, CalendarDays, Download, Banknote, Archive, Accessibility, Search
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
@@ -368,7 +368,7 @@ export default function ReportsPage() {
       });
 
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM ensures special chars (like ₱) work in Excel
       const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' }); 
       
       const url = URL.createObjectURL(blob); 
@@ -390,67 +390,50 @@ export default function ReportsPage() {
     }
   }
 
-  // REWRITTEN TO BYPASS ALL FIREWALLS USING NATIVE BROWSER PRINT ENGINE
-  const handleExportPDF = (cycleName: string) => {
+  // REWRITTEN TO USE LOCAL LIBRARY, BYPASSING CDN FIREWALL AND SAVING DIRECTLY
+  const handleExportPDF = async (cycleName: string) => {
     const targetId = `pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`;
-    const originalElement = document.getElementById(targetId);
+    const element = document.getElementById(targetId);
     
-    if (!originalElement) {
+    if (!element) {
       toast({ title: "Export Failed", description: "Could not find the chart container.", variant: "destructive" });
       return;
     }
 
     toast({ 
-      title: "Opening Print Dialog", 
-      description: "Please change the 'Destination' to 'Save as PDF' to download.", 
-      className: "bg-blue-600 text-white",
-      duration: 5000
+      title: "Generating PDF...", 
+      description: "Please wait while we save your report.", 
+      className: "bg-blue-600 text-white" 
     });
 
-    // 1. Create a temporary container that covers the entire screen
-    const printContainer = document.createElement('div');
-    printContainer.id = 'temp-native-print-container';
-    printContainer.style.position = 'absolute';
-    printContainer.style.top = '0';
-    printContainer.style.left = '0';
-    printContainer.style.width = '100%';
-    printContainer.style.minHeight = '100vh';
-    printContainer.style.backgroundColor = '#ffffff';
-    printContainer.style.zIndex = '999999';
-    printContainer.style.padding = '20px';
-    
-    // Copy the charts directly into this container
-    printContainer.innerHTML = originalElement.outerHTML;
+    try {
+      // Dynamically importing local node_modules library to completely avoid external web scripts
+      // @ts-ignore
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = html2pdfModule.default || html2pdfModule;
 
-    // 2. Inject a style rule that hides the rest of the application ONLY during printing
-    const printStyle = document.createElement('style');
-    printStyle.innerHTML = `
-      @media print {
-        body > *:not(#temp-native-print-container) {
-          display: none !important;
-        }
-        body {
-          background-color: white !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        @page { size: landscape; margin: 10mm; }
-      }
-    `;
+      const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const opt = { 
+        margin: [0.3, 0.3, 0.3, 0.3], 
+        filename: `Analytics_${safeExportName}.pdf`, 
+        image: { type: 'jpeg', quality: 0.98 }, 
+        html2canvas: { scale: 2, useCORS: true, logging: false }, 
+        jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
 
-    document.body.appendChild(printContainer);
-    document.head.appendChild(printStyle);
-
-    // Wait a brief moment for the DOM to register, then trigger the native print dialog
-    setTimeout(() => {
-      window.print();
+      await html2pdf().set(opt).from(element).save();
       
-      // Clean up the temporary elements right after the print dialog closes
-      setTimeout(() => {
-        if (document.body.contains(printContainer)) document.body.removeChild(printContainer);
-        if (document.head.contains(printStyle)) document.head.removeChild(printStyle);
-      }, 100);
-    }, 500);
+      toast({ title: "Export Successful", description: "PDF has been downloaded.", className: "bg-emerald-600 text-white" });
+    } catch (error: any) {
+      console.error("PDF Export error:", error);
+      toast({ 
+        title: "Export Failed", 
+        description: "Failed to render PDF. Did you run 'pnpm add html2pdf.js' in your terminal?", 
+        variant: "destructive",
+        duration: 8000 
+      });
+    }
   }
 
   const renderChart = (data: any[], chartElement: React.ReactNode, emptyMessage: string) => {
