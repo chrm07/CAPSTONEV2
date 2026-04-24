@@ -261,7 +261,43 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col py-4 overflow-hidden">
+              {/* FIX: Mobile Search Bar injected inside the mobile menu */}
+              <div className="px-4 pt-4 pb-2 shrink-0">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 z-10" />
+                  <Input
+                    placeholder="Search pages..."
+                    className="pl-10 w-full h-10 border-slate-200 focus:border-emerald-500 rounded-xl bg-slate-50 text-slate-900 placeholder:text-slate-400 text-sm transition-colors"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery.trim() !== "" && (
+                    <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-[110]">
+                      {filteredSearchPages.length > 0 ? (
+                        filteredSearchPages.map(page => (
+                          <button
+                            key={page.href}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              router.push(page.href);
+                              setSearchQuery("");
+                              setIsMobileMenuOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left group border-b border-slate-100 last:border-0"
+                          >
+                            <page.icon className="h-4 w-4 text-emerald-600" />
+                            <span className="text-sm font-bold text-slate-700">{page.name}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-4 py-4 text-xs text-slate-500 text-center">No pages found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col py-2 overflow-hidden">
                 <nav className="flex-1 flex flex-col px-4">
                   <div className="flex-1 overflow-y-auto pt-2">
                     <p className="mb-3 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Main Navigation</p>
@@ -312,6 +348,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
 
         <div className="flex items-center gap-3">
           
+          {/* Desktop Search Bar (Hidden on mobile) */}
           <div className="hidden md:flex relative w-64 mx-4">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60 z-10" />
             <Input
