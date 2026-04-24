@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import {
   Users, CheckCircle, Clock, XCircle, TrendingUp, GraduationCap, 
   MapPin, School, BookOpen, UserIcon, ChevronDown, Loader2, Activity, 
-  FileSpreadsheet, FileImage, FileBarChart, CalendarDays, Download, Banknote, Archive, Accessibility, Search
+  FileSpreadsheet, FileImage, FileBarChart, CalendarDays, Download, Ban, Banknote, Archive, Accessibility, Search
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
@@ -390,7 +390,7 @@ export default function ReportsPage() {
     }
   }
 
-  // REWRITTEN TO USE LOCAL LIBRARY, BYPASSING CDN FIREWALL AND SAVING DIRECTLY
+  // --- SAFELY COMPILES IN NEXT.JS WITHOUT WEBPACK MODULE ERRORS ---
   const handleExportPDF = async (cycleName: string) => {
     const targetId = `pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`;
     const element = document.getElementById(targetId);
@@ -407,29 +407,40 @@ export default function ReportsPage() {
     });
 
     try {
-      // Dynamically importing local node_modules library to completely avoid external web scripts
-      // @ts-ignore
-      const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = html2pdfModule.default || html2pdfModule;
+      // Dynamic imports prevent Next.js from throwing SSR/Webpack build errors
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
 
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true,
+        logging: false 
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      
+      // Setup A3 Landscape formatting
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'in',
+        format: 'a3'
+      });
+
+      const margin = 0.3; // Match previous 0.3in margin
+      const pdfWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'JPEG', margin, margin, pdfWidth, pdfHeight);
+      
       const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const opt = { 
-        margin: [0.3, 0.3, 0.3, 0.3], 
-        filename: `Analytics_${safeExportName}.pdf`, 
-        image: { type: 'jpeg', quality: 0.98 }, 
-        html2canvas: { scale: 2, useCORS: true, logging: false }, 
-        jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
-
-      await html2pdf().set(opt).from(element).save();
+      pdf.save(`Analytics_${safeExportName}.pdf`);
       
       toast({ title: "Export Successful", description: "PDF has been downloaded.", className: "bg-emerald-600 text-white" });
     } catch (error: any) {
       console.error("PDF Export error:", error);
       toast({ 
         title: "Export Failed", 
-        description: "Failed to render PDF. Did you run 'pnpm add html2pdf.js' in your terminal?", 
+        description: "Failed to render PDF. Did you install html2canvas?", 
         variant: "destructive",
         duration: 8000 
       });
