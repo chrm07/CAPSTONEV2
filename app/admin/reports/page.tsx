@@ -321,7 +321,6 @@ export default function ReportsPage() {
     { name: "Unsuccessful", value: stats.rejected, fill: "#ef4444" } 
   ]
 
-  // 🔥 FIX: Adjusted filtering logic to support both active and historical status schemas
   const handleExportExcel = (cycleData: ReportScholar[], exportName: string, reportType: string, scheduledAmount: string) => {
     try {
       let filteredData = cycleData;
@@ -371,26 +370,42 @@ export default function ReportsPage() {
     } catch (error) { toast({ title: "Export Failed", variant: "destructive" }); }
   }
 
+  // 🔥 FIX: ADDED ERROR HANDLING & AWAIT TO PREVENT INFINITE LOADING
   const handleExportPDF = async (cycleName: string) => {
     const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
     if (!element || typeof window === "undefined") return;
-    toast({ title: "Preparing PDF...", className: "bg-blue-600 text-white" });
     
-    if (!(window as any).html2pdf) {
-      const script = document.body.appendChild(document.createElement("script"));
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      await new Promise((resolve) => { script.onload = resolve; });
-    }
+    toast({ title: "Preparing PDF...", description: "Please wait...", className: "bg-blue-600 text-white" });
 
-    const opt = { 
-      margin: [0.3, 0.3, 0.3, 0.3], 
-      filename: `Analytics_${cycleName.replace(/\s+/g, '_')}.pdf`, 
-      image: { type: 'jpeg', quality: 1 }, 
-      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
-      jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
-      pagebreak: { mode: ['css', 'legacy'] }
-    };
-    (window as any).html2pdf().set(opt).from(element).save();
+    try {
+      if (!(window as any).html2pdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          // Switched to jsdelivr as it is less frequently blocked by adblockers than cdnjs
+          script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js";
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Network blocked the PDF library.")); // Prevents infinite loading
+          document.body.appendChild(script);
+        });
+      }
+
+      const opt = { 
+        margin: [0.3, 0.3, 0.3, 0.3], 
+        filename: `Analytics_${cycleName.replace(/\s+/g, '_')}.pdf`, 
+        image: { type: 'jpeg', quality: 1 }, 
+        html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
+        jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
+      
+      // We explicitly await the save so the success message only fires when finished
+      await (window as any).html2pdf().set(opt).from(element).save();
+      toast({ title: "Export Successful", description: "PDF downloaded successfully.", className: "bg-emerald-600 text-white" });
+      
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Export Failed", description: err.message || "Failed to generate PDF.", variant: "destructive" });
+    }
   }
 
   const renderChart = (data: any[], chartElement: React.ReactNode, emptyMessage: string) => {
