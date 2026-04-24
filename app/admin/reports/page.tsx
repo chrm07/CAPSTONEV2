@@ -8,10 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import {
   Users, CheckCircle, Clock, XCircle, TrendingUp, GraduationCap, 
   MapPin, School, BookOpen, UserIcon, ChevronDown, Loader2, Activity, 
-  FileSpreadsheet, FileImage, FileBarChart, CalendarDays, Download, Ban, Banknote, Archive, Accessibility
+  FileSpreadsheet, FileImage, FileBarChart, CalendarDays, Download, Ban, Banknote, Archive, Accessibility, Search
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
@@ -113,6 +114,7 @@ export default function ReportsPage() {
   
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null)
   const [historyYearFilter, setHistoryYearFilter] = useState("all")
+  const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
     let unsubscribeUsers: () => void;
@@ -319,7 +321,6 @@ export default function ReportsPage() {
     { name: "Unsuccessful", value: stats.rejected, fill: "#ef4444" } 
   ]
 
-  // 🔥 FIX: Adjusted filtering logic to support both active and historical status schemas
   const handleExportExcel = (cycleData: ReportScholar[], exportName: string, reportType: string, scheduledAmount: string) => {
     try {
       let filteredData = cycleData;
@@ -372,23 +373,35 @@ export default function ReportsPage() {
   const handleExportPDF = async (cycleName: string) => {
     const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
     if (!element || typeof window === "undefined") return;
-    toast({ title: "Preparing PDF...", className: "bg-blue-600 text-white" });
     
-    if (!(window as any).html2pdf) {
-      const script = document.body.appendChild(document.createElement("script"));
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      await new Promise((resolve) => { script.onload = resolve; });
-    }
+    toast({ title: "Preparing PDF...", description: "Please wait while we generate your report.", className: "bg-blue-600 text-white" });
+    
+    try {
+      if (!(window as any).html2pdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Failed to load PDF library"));
+          document.body.appendChild(script);
+        });
+      }
 
-    const opt = { 
-      margin: [0.3, 0.3, 0.3, 0.3], 
-      filename: `Analytics_${cycleName.replace(/\s+/g, '_')}.pdf`, 
-      image: { type: 'jpeg', quality: 1 }, 
-      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
-      jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
-      pagebreak: { mode: ['css', 'legacy'] }
-    };
-    (window as any).html2pdf().set(opt).from(element).save();
+      const opt = { 
+        margin: [0.3, 0.3, 0.3, 0.3], 
+        filename: `Analytics_${cycleName.replace(/\s+/g, '_')}.pdf`, 
+        image: { type: 'jpeg', quality: 1 }, 
+        html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 1440 }, 
+        jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
+
+      await (window as any).html2pdf().set(opt).from(element).save();
+      toast({ title: "Export Successful", description: "PDF has been downloaded.", className: "bg-emerald-600 text-white" });
+    } catch (error) {
+      console.error("PDF Export error:", error);
+      toast({ title: "Export Failed", description: "An error occurred while generating the PDF.", variant: "destructive" });
+    }
   }
 
   const renderChart = (data: any[], chartElement: React.ReactNode, emptyMessage: string) => {
@@ -569,9 +582,22 @@ export default function ReportsPage() {
                             const matchedSchedule = scheduleHistory.find(sh => formatDate(sh.endedAt) === cycleDateStr);
                             const scheduledAmountText = matchedSchedule?.distributionAmount ? `₱${matchedSchedule.distributionAmount}` : "N/A";
 
+                            const filteredStudents = data.filter(s => 
+                              s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              s.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              s.course.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              s.schoolName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              s.barangay.toLowerCase().includes(searchQuery.toLowerCase())
+                            );
+
                             return (
                               <React.Fragment key={cycle}>
-                                <TableRow className={`cursor-pointer transition-colors border-slate-100 ${isExpanded ? "bg-emerald-50/50 border-b-emerald-100" : "hover:bg-slate-50/50"}`} onClick={() => setExpandedCycle(isExpanded ? null : cycle)}>
+                                <TableRow className={`cursor-pointer transition-colors border-slate-100 ${isExpanded ? "bg-emerald-50/50 border-b-emerald-100" : "hover:bg-slate-50/50"}`} 
+                                  onClick={() => { 
+                                    setExpandedCycle(isExpanded ? null : cycle);
+                                    if (!isExpanded) setSearchQuery("");
+                                  }}
+                                >
                                   <TableCell className="pl-6 py-4 font-black text-slate-800 text-sm whitespace-nowrap">{cycleDateStr}</TableCell>
                                   <TableCell><DateWindowDisplay start={matchedSchedule?.submissionStart} end={matchedSchedule?.submissionEnd} /></TableCell>
                                   <TableCell><DateWindowDisplay start={matchedSchedule?.distributionStart} end={matchedSchedule?.distributionEnd} /></TableCell>
@@ -582,7 +608,7 @@ export default function ReportsPage() {
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-center font-black text-slate-600 text-sm">{cycleStats.approved}</TableCell>
-                                  <TableCell className="text-right pr-6"><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setExpandedCycle(isExpanded ? null : cycle); }} className="font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl px-4">{isExpanded ? "Hide Reports" : "View Reports"}<ChevronDown className={`w-4 h-4 ml-1 transition-transform ${isExpanded ? "rotate-180" : ""}`}/></Button></TableCell>
+                                  <TableCell className="text-right pr-6"><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setExpandedCycle(isExpanded ? null : cycle); if (!isExpanded) setSearchQuery(""); }} className="font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl px-4">{isExpanded ? "Hide Reports" : "View Reports"}<ChevronDown className={`w-4 h-4 ml-1 transition-transform ${isExpanded ? "rotate-180" : ""}`}/></Button></TableCell>
                                 </TableRow>
 
                                 {isExpanded && (
@@ -654,8 +680,17 @@ export default function ReportsPage() {
                                         </div>
 
                                         <Card className="rounded-3xl border-slate-200 shadow-sm mt-8 print:hidden bg-white w-full">
-                                          <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
+                                          <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                             <CardTitle className="text-sm font-black uppercase tracking-tight text-slate-800 flex items-center gap-2"><BookOpen className="w-4 h-4 text-emerald-600" /> Students - {cycleDateStr}</CardTitle>
+                                            <div className="relative w-full sm:w-64">
+                                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                              <Input 
+                                                placeholder="Search students..." 
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                className="pl-9 h-9 bg-white border-slate-200 focus-visible:ring-emerald-500 rounded-xl text-sm"
+                                              />
+                                            </div>
                                           </CardHeader>
                                           <CardContent className="p-0 overflow-hidden w-full">
                                             <div className="overflow-x-auto custom-scrollbar w-full max-h-[400px] overflow-y-auto">
@@ -670,7 +705,7 @@ export default function ReportsPage() {
                                                   </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                  {data.map(s => (
+                                                  {filteredStudents.length > 0 ? filteredStudents.map(s => (
                                                     <TableRow key={s.id} className="hover:bg-slate-50 transition-colors border-slate-100">
                                                       <TableCell className="pl-4 py-3">
                                                         <div className="font-bold text-slate-800 text-sm whitespace-nowrap">{s.name}</div>
@@ -698,7 +733,11 @@ export default function ReportsPage() {
                                                          {s.applicationStatus === "claimed" || (s.applicationStatus === "approved" && s.isClaimed) ? ((s.amountReceived && s.amountReceived !== "N/A") ? s.amountReceived : scheduledAmountText) : <span className="text-slate-300">-</span>}
                                                       </TableCell>
                                                     </TableRow>
-                                                  ))}
+                                                  )) : (
+                                                    <TableRow>
+                                                      <TableCell colSpan={5} className="text-center py-8 text-slate-500 font-medium">No students found matching your search.</TableCell>
+                                                    </TableRow>
+                                                  )}
                                                 </TableBody>
                                               </Table>
                                             </div>
