@@ -352,7 +352,6 @@ export default function ReportsPage() {
 
         const fallbackAmount = (s.amountReceived && s.amountReceived !== "N/A") ? s.amountReceived : scheduledAmount;
         
-        // Helper to safely format text and prevent commas from breaking CSV columns
         const safeString = (val: any) => `"${String(val || "").replace(/"/g, '""')}"`;
         
         const baseRow = [ 
@@ -369,7 +368,7 @@ export default function ReportsPage() {
       });
 
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM ensures special chars (like ₱) work in Excel
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM
       const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' }); 
       
       const url = URL.createObjectURL(blob); 
@@ -391,51 +390,67 @@ export default function ReportsPage() {
     }
   }
 
-  const handleExportPDF = async (cycleName: string) => {
-    const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
-    if (!element || typeof window === "undefined") {
-      toast({ title: "Export Failed", description: "Could not find the chart container to export.", variant: "destructive" });
+  // REWRITTEN TO BYPASS ALL FIREWALLS USING NATIVE BROWSER PRINT ENGINE
+  const handleExportPDF = (cycleName: string) => {
+    const targetId = `pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`;
+    const originalElement = document.getElementById(targetId);
+    
+    if (!originalElement) {
+      toast({ title: "Export Failed", description: "Could not find the chart container.", variant: "destructive" });
       return;
     }
+
+    toast({ 
+      title: "Opening Print Dialog", 
+      description: "Please change the 'Destination' to 'Save as PDF' to download.", 
+      className: "bg-blue-600 text-white",
+      duration: 5000
+    });
+
+    // 1. Create a temporary container that covers the entire screen
+    const printContainer = document.createElement('div');
+    printContainer.id = 'temp-native-print-container';
+    printContainer.style.position = 'absolute';
+    printContainer.style.top = '0';
+    printContainer.style.left = '0';
+    printContainer.style.width = '100%';
+    printContainer.style.minHeight = '100vh';
+    printContainer.style.backgroundColor = '#ffffff';
+    printContainer.style.zIndex = '999999';
+    printContainer.style.padding = '20px';
     
-    toast({ title: "Preparing PDF...", description: "Please wait while we generate your report.", className: "bg-blue-600 text-white" });
-    
-    try {
-      if (!(window as any).html2pdf) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          // Switched CDN to jsdelivr to avoid adblocker issues
-          script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js";
-          script.onload = () => {
-            if ((window as any).html2pdf) resolve(true);
-            else reject(new Error("PDF library loaded but failed to initialize."));
-          };
-          script.onerror = () => reject(new Error("Failed to load PDF library. Your adblocker or firewall might be blocking the CDN."));
-          document.body.appendChild(script);
-        });
+    // Copy the charts directly into this container
+    printContainer.innerHTML = originalElement.outerHTML;
+
+    // 2. Inject a style rule that hides the rest of the application ONLY during printing
+    const printStyle = document.createElement('style');
+    printStyle.innerHTML = `
+      @media print {
+        body > *:not(#temp-native-print-container) {
+          display: none !important;
+        }
+        body {
+          background-color: white !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        @page { size: landscape; margin: 10mm; }
       }
+    `;
 
-      const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const opt = { 
-        margin: [0.3, 0.3, 0.3, 0.3], 
-        filename: `Analytics_${safeExportName}.pdf`, 
-        image: { type: 'jpeg', quality: 0.98 }, 
-        html2canvas: { scale: 2, useCORS: true, logging: false }, 
-        jsPDF: { unit: 'in', format: 'a3', orientation: 'landscape' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
+    document.body.appendChild(printContainer);
+    document.head.appendChild(printStyle);
 
-      await (window as any).html2pdf().set(opt).from(element).save();
-      toast({ title: "Export Successful", description: "PDF has been downloaded.", className: "bg-emerald-600 text-white" });
-    } catch (error: any) {
-      console.error("PDF Export error:", error);
-      toast({ 
-        title: "Export Failed", 
-        description: error?.message || "An unknown error occurred while rendering the PDF.", 
-        variant: "destructive",
-        duration: 6000 
-      });
-    }
+    // Wait a brief moment for the DOM to register, then trigger the native print dialog
+    setTimeout(() => {
+      window.print();
+      
+      // Clean up the temporary elements right after the print dialog closes
+      setTimeout(() => {
+        if (document.body.contains(printContainer)) document.body.removeChild(printContainer);
+        if (document.head.contains(printStyle)) document.head.removeChild(printStyle);
+      }, 100);
+    }, 500);
   }
 
   const renderChart = (data: any[], chartElement: React.ReactNode, emptyMessage: string) => {
