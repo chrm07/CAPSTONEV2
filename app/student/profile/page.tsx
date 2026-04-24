@@ -463,22 +463,23 @@ export default function ProfilePage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           
-          <TabsList className="w-full justify-start bg-transparent border-b border-slate-200 rounded-none h-auto p-0 gap-8 px-2 overflow-x-auto overflow-y-hidden no-scrollbar">
+          {/* FIX: Changed to flex-wrap and adjusted padding/gap for smaller screens */}
+          <TabsList className="flex flex-wrap w-full justify-start bg-transparent border-b border-slate-200 rounded-none h-auto p-0 gap-x-6 gap-y-2 px-2 pb-2 sm:pb-0">
             <TabsTrigger 
               value="info" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-4 text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-3 text-sm sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap"
             >
               Information
             </TabsTrigger>
             <TabsTrigger 
               value="academics" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-4 text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-3 text-sm sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap"
             >
               Academic Profile
             </TabsTrigger>
             <TabsTrigger 
               value="security" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-4 text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 px-0 py-3 text-sm sm:text-base font-bold text-slate-500 transition-all mb-[-1px] whitespace-nowrap"
             >
               Change Password
             </TabsTrigger>
