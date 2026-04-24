@@ -370,9 +370,12 @@ export default function ReportsPage() {
     } catch (error) { toast({ title: "Export Failed", variant: "destructive" }); }
   }
 
-  // 🔥 COMPLETELY LOCAL, FIREWALL-PROOF GRAPH EXPORTER
+  // 🔥 COMPLETELY LOCAL, HIGH-RES VISUAL GRAPH EXPORTER
+  // Creates a single custom-dimension PDF so charts are NEVER sliced off!
   const handleExportPDF = async (cycleName: string) => {
-    const element = document.getElementById(`pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`);
+    const targetId = `pdf-charts-export-${cycleName.replace(/\s+/g, '-')}`;
+    const element = document.getElementById(targetId);
+    
     if (!element) {
       toast({ title: "Export Failed", description: "Could not find the graphs.", variant: "destructive" });
       return;
@@ -380,46 +383,61 @@ export default function ReportsPage() {
 
     toast({ 
       title: "Generating PDF...", 
-      description: "Please wait while we capture your graphs.", 
+      description: "Taking a snapshot of your graphs...", 
       className: "bg-blue-600 text-white" 
     });
 
     try {
-      // Dynamic imports prevent Next.js from throwing SSR/Webpack build errors
       const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
 
+      // Temporarily force desktop formatting for the DOM so the responsive charts don't get squished
+      const originalWidth = element.style.width;
+      const originalMaxWidth = element.style.maxWidth;
+      const originalBg = element.style.backgroundColor;
+      const originalPadding = element.style.padding;
+
+      element.style.width = "1200px";
+      element.style.maxWidth = "1200px";
+      element.style.backgroundColor = "#ffffff";
+      element.style.padding = "40px";
+
       const canvas = await html2canvas(element, { 
-        scale: 2, 
+        scale: 2, // 2x scale for crisp high-definition charts
         useCORS: true,
         logging: false,
-        backgroundColor: "#ffffff"
+        backgroundColor: "#ffffff",
+        windowWidth: 1200
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      // Restore the DOM immediately after capture
+      element.style.width = originalWidth;
+      element.style.maxWidth = originalMaxWidth;
+      element.style.backgroundColor = originalBg;
+      element.style.padding = originalPadding;
+
+      // Use JPEG because it's significantly smaller file size than PNG for large graphs
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
       
-      // Setup A3 Landscape formatting
+      // We set the PDF size to exactly match the canvas! 
+      // This prevents the graphs from being sliced awkwardly across multiple pages.
       const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'in',
-        format: 'a3'
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
       });
 
-      const margin = 0.3; 
-      const pdfWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'JPEG', margin, margin, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
       
       const safeExportName = cycleName.replace(/[^a-zA-Z0-9_-]/g, '_');
       pdf.save(`Analytics_${safeExportName}.pdf`);
       
-      toast({ title: "Export Successful", description: "PDF has been saved.", className: "bg-emerald-600 text-white" });
+      toast({ title: "Export Successful", description: "Visual report downloaded.", className: "bg-emerald-600 text-white" });
     } catch (error: any) {
       console.error("PDF Export error:", error);
       toast({ 
         title: "Export Failed", 
-        description: "Make sure you ran 'pnpm add html2canvas' in your terminal.", 
+        description: "An error occurred. Make sure 'html2canvas' and 'jspdf' are installed.", 
         variant: "destructive",
         duration: 8000 
       });
@@ -654,7 +672,7 @@ export default function ReportsPage() {
                                              <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Unclaimed', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><UnclaimedIcon className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight text-red-600">Unclaimed<br/>(XLSX)</span></Button>
                                              <Button onClick={() => handleExportExcel(filteredStudents, cycle, 'Unsuccessful', scheduledAmountText)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5"><XCircle className="h-5 w-5 text-red-500 shrink-0 group-hover:scale-110 transition-transform" /><span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Unsuccessful List<br/>(XLSX)</span></Button>
                                              
-                                             {/* 🔥 UPDATED GRAPH EXPORTER */}
+                                             {/* 🔥 NEW GRAPH EXPORTER */}
                                              <Button onClick={() => handleExportPDF(cycle)} variant="outline" className="h-auto py-3 px-2 flex flex-col items-center justify-center rounded-xl border-slate-200 font-bold group gap-1.5">
                                                <FileImage className="h-5 w-5 text-emerald-500 shrink-0 group-hover:scale-110 transition-transform" />
                                                <span className="text-center text-[10px] uppercase tracking-tight whitespace-normal leading-tight">Export Graphs<br/>(PDF)</span>
