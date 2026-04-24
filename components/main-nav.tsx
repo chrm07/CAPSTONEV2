@@ -1,51 +1,49 @@
 "use client"
+
+import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Menu } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet"
 
 export function MainNav() {
   const pathname = usePathname()
 
   return (
-    <div className="mr-4 flex">
-      <Sheet>
-        {/* The "3 lines" hamburger button */}
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle Menu</span>
-          </Button>
-        </SheetTrigger>
-        
-        {/* FIX 1: Add aria-describedby={undefined} if you don't want a description, 
-            or include <SheetDescription> inside. We are doing both to be safe. */}
-        <SheetContent side="left" className="pr-0">
-          
-          {/* FIX 2: You MUST have a SheetTitle and SheetDescription inside SheetContent. 
-              The 'sr-only' class keeps them completely hidden from the screen. */}
-          <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-          <SheetDescription className="sr-only">
-            Main navigation for the application.
-          </SheetDescription>
+    <div className="mr-4 flex items-center gap-6">
+      
+      {/* BRAND / LOGO - Always visible on all screens */}
+      <Link href="/" className="flex items-center gap-3">
+        <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center shadow-inner overflow-hidden">
+          {/* Make sure you have your logo in the public/images folder! */}
+          <img src="/images/image.png" alt="Logo" className="object-cover" />
+        </div>
+        <span className="text-xl font-black text-white tracking-tighter uppercase">
+          BTS Portal
+        </span>
+      </Link>
 
-          <div className="flex flex-col space-y-4 pt-8">
-            {/* FIX 3: YOUR LINKS GO HERE. 
-              DO NOT ADD A <SheetClose> OR <X /> BUTTON HERE! 
-              The <SheetContent> wrapper already renders the "X" automatically.
-            */}
-            <a href="/" className="text-lg font-medium">Home</a>
-            <a href="/about" className="text-lg font-medium">About</a>
-          </div>
-          
-        </SheetContent>
-      </Sheet>
+      {/* HORIZONTAL NAVIGATION - Hidden on mobile, visible on desktop */}
+      <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
+        <Link 
+          href="/" 
+          className={`transition-colors hover:text-white ${
+            pathname === '/' ? 'text-white font-bold' : 'text-white/80'
+          }`}
+        >
+          Home
+        </Link>
+        <Link 
+          href="/#features" 
+          className="transition-colors text-white/80 hover:text-white"
+        >
+          Features
+        </Link>
+        <Link 
+          href="/#faq" 
+          className="transition-colors text-white/80 hover:text-white"
+        >
+          FAQ
+        </Link>
+      </nav>
+
     </div>
   )
 }
